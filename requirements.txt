@@ -1,0 +1,5 @@
+pandas
+numpy
+matplotlib
+# OpenCv should check
+-e .
