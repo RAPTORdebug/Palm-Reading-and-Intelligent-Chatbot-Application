@@ -35,7 +35,7 @@ def validate_image(in_image):
         ).var()
         if blur_score < 40:
             return False, "Image looks blurry"
-        return True, "Image quality looks suitable for the next step."
+        return True
 
     except Exception:
         return False, "Unable to read this image. Please upload a JPG or PNG."
