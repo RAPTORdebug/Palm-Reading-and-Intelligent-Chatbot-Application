@@ -1,94 +1,53 @@
-import cv2
+import cv2 as cv
 import numpy as np
-from PIL import Image
-from io import BytesIO
+from modules.validation import validation
 
-def preprocessing_pip(in_image):
+def preprocessing(left_palm, right_palm):
+    val, left, right, left_gray, right_gray = validation(
+        left_palm, right_palm
+    )
 
-    if in_image is None:
-        return False, "Plsupload an image."
-    
-    try:
-        #read the image
-        if isinstance(in_image, np.ndarray):
-            image_array = in_image.copy()
-            # OpenCV arrays commonly use BGR; convert to RGB.
-            if image_array.ndim == 3 and image_array.shape[2] == 3:
-                image_array = cv2.cvtColor(image_array, cv2.COLOR_BGR2RGB)
-        else:
-            if isinstance(in_image, bytes):
-                image_source = BytesIO(in_image)
-            else:
-                image_source = in_image
+    completed = False
 
-            if hasattr(image_source, "seek"):
-                image_source.seek(0)
-
-            with Image.open(image_source) as image:
-                image_array = np.array(image.convert("RGB"))
-
-            if hasattr(image_source, "seek"):
-                image_source.seek(0)
-
-        if image_array.size == 0:
-            return False, "The uploaded image is empty."
-
-        #Resize proportionally without distorting the palm
-        original_height, original_width = image_array.shape[:2]
-
-        max_width = 640
-        max_height = 640
-
-        scale = min(max_width / original_width,max_height / original_height,1.0,)
-        new_width = max(1, int(original_width * scale))
-        new_height = max(1, int(original_height * scale))
-
-        resized = cv2.resize(
-            image_array,
-            (new_width, new_height),
-            interpolation=cv2.INTER_AREA
-            if scale < 1.0
-            else cv2.INTER_LINEAR,
+    if val:
+        print("Validation passed - started preprocessing")
+        # gray
+        left_gray = left_gray
+        right_gray = right_gray
+        # blur
+        left_blur = cv.GaussianBlur(left_gray, (5, 5), 0)
+        right_blur = cv.GaussianBlur(right_gray, (5, 5), 0)
+        # contrast enhancement 
+        clahe = cv.createCLAHE(clipLimit=2.0, tileGridSize=(8,8),)
+        left_enhanced = clahe.apply(left_blur)
+        right_enhanced = clahe.apply(right_blur)
+        # binary segmentation
+        _, left_binary = cv.threshold(left_enhanced,0,255,cv.THRESH_BINARY + cv.THRESH_OTSU,)
+        _, right_binary = cv.threshold(right_enhanced,0,255,cv.THRESH_BINARY + cv.THRESH_OTSU,)
+        # reducing noise
+        kernal = cv.getStructuringElement(cv.MORPH_RECT, (3,3))
+        left_cleaned = cv.morphologyEx(
+            left_binary, cv.MORPH_OPEN, kernal
         )
-        gray = cv2.cvtColor(resized, cv2.COLOR_RGB2GRAY)
-        #noise reduction
-        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-        #local contrast enhancement
-        clahe = cv2.createCLAHE(clipLimit=2.0,tileGridSize=(8, 8),)
-        enhanced = clahe.apply(blurred)
-        #binary segmentation
-        _, binary = cv2.threshold(enhanced,0,255,cv2.THRESH_BINARY + cv2.THRESH_OTSU,)
-        #reduce small noise
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-        cleaned = cv2.morphologyEx(
-            binary,
-            cv2.MORPH_OPEN,
-            kernel,
+        right_cleaned = cv.morphologyEx(
+                    right_binary, cv.MORPH_OPEN, kernal
         )
-        #Canny edge detection
-        edges = cv2.Canny(
-            enhanced,
-            threshold1=50,
-            threshold2=150,
-        )
+        # edge detection - canny(much suitable here)
+        left_edges = cv.Canny(left_enhanced, threshold1=50, threshold2=150)
+        right_edges = cv.Canny(right_enhanced, threshold1=50, threshold2=150)
 
-        # Return every stage for display and further analysis
         results = {
-            "original": image_array,
-            "resized": resized,
-            "gray": gray,
-            "blurred": blurred,
-            "enhanced": enhanced,
-            "binary": binary,
-            "cleaned": cleaned,
-            "edges": edges,
+            "original": (left, right),
+            "grayscale": (left_gray, right_gray),
+            "blurred": (left_blur, right_blur),
+            "enhanced": (left_enhanced, right_enhanced),
+            "binary": (left_binary, right_binary),
+            "cleaned": (left_cleaned, right_cleaned),
+            "edges": (left_edges, right_edges)
         }
-
-        return True, results
-
-    except Exception:
-        return (
-            False,
-            "Unable to preprocess this image. "
-            "Please check the file and try again.",
-        )
+        completed = True
+        return completed, results
+    else:
+        print("Validation failed")
+        completed = False
+        return None, None, None, None
