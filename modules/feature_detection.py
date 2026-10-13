@@ -1,8 +1,7 @@
-
 import cv2 as cv
 import numpy as np
 import mediapipe as mp
-
+from skimage.morphology import skeletonize
 from modules.preprocessing import preprocessing
 
 mp_hands = mp.solutions.hands
@@ -155,16 +154,111 @@ def extract_creases(enhanced, palm_mask):
     return blackhat, crease_mask
 
 
+def classify_palm_lines(crease_mask, points, palm_mask):
+    """
+    Heuristically classify crease candidates by location,
+    orientation, and size.
+
+    Returns:
+        List of (contour, label, color) tuples.
+    """
+    ys, xs = np.where(palm_mask > 0)
+
+    if len(xs) == 0:
+        return []
+
+    x_min, x_max = xs.min(), xs.max()
+    y_min, y_max = ys.min(), ys.max()
+
+    palm_width = max(1, x_max - x_min)
+    palm_height = max(1, y_max - y_min)
+
+    # Determine which side contains the thumb.
+    thumb_is_left = points[2][0] < points[17][0]
+
+    # Skeletonize to reduce thick crease candidates.
+    skeleton = skeletonize(crease_mask > 0)
+    skeleton = skeleton.astype(np.uint8) * 255
+
+    contours, _ = cv.findContours(
+        skeleton,
+        cv.RETR_LIST,
+        cv.CHAIN_APPROX_NONE
+    )
+
+    classified = []
+
+    for contour in contours:
+        if len(contour) < 10:
+            continue
+
+        length = cv.arcLength(contour, False)
+
+        if length < 18:
+            continue
+
+        x, y, cw, ch = cv.boundingRect(contour)
+
+        if cw < 8 and ch < 8:
+            continue
+
+        cx = (x + cw / 2 - x_min) / palm_width
+        cy = (y + ch / 2 - y_min) / palm_height
+
+        nw = cw / palm_width
+        nh = ch / palm_height
+
+        print(
+            f"center=({cx:.2f}, {cy:.2f}), "
+            f"width={nw:.2f}, height={nh:.2f}, "
+            f"length={length:.1f}"
+        )
+
+        # Default: uncertain crease.
+        label = "Unclassified crease"
+        color = (255, 0, 255)
+
+        horizontal = nw > 0.28 and nw > nh * 1.2
+        vertical = nh > 0.18 and nh > nw * 0.7
+
+        # Upper cross-palm candidate: heart line.
+        if cy < 0.43 and horizontal:
+            label = "Possible heart line"
+            color = (0, 0, 255)
+
+        # Middle cross-palm candidate: head line.
+        elif 0.43 <= cy < 0.72 and horizontal:
+            label = "Possible head line"
+            color = (255, 0, 0)
+
+        # Thumb-side, vertically oriented candidate:
+        # possible life line.
+        elif vertical and (
+            (thumb_is_left and cx < 0.48)
+            or (not thumb_is_left and cx > 0.52)
+        ):
+            label = "Possible life line"
+            color = (0, 200, 0)
+
+        # Central vertical candidate: possible fate line.
+        elif vertical and 0.30 <= cx <= 0.70 and cy > 0.35:
+            label = "Possible fate line"
+            color = (0, 165, 255)
+
+        classified.append((contour, label, color))
+
+        print("Classified as:", label)
+
+    return classified
+
+
 def annotate_palm(original, points, palm_mask, crease_mask):
-    """Display the palm mask boundary and crease candidates."""
+    """Draw palm outline, landmarks, and classified crease candidates."""
+
     height, width = palm_mask.shape[:2]
+    annotated = cv.resize(original, (width, height)).copy()
 
-    # Keep the annotation at the processed image size
-    annotated = cv.resize(
-        original, (width, height)
-    ).copy()
-
-    # Draw the palm-mask boundary
+    # Draw palm-region boundary
     palm_contours, _ = cv.findContours(
         palm_mask,
         cv.RETR_EXTERNAL,
@@ -172,60 +266,50 @@ def annotate_palm(original, points, palm_mask, crease_mask):
     )
 
     cv.drawContours(
-        annotated,
-        palm_contours,
-        -1,
-        (0, 255, 255),
-        2
+        annotated, palm_contours, -1, (0, 255, 255), 2
     )
 
-    # Draw crease candidates
-    crease_contours, _ = cv.findContours(
-        crease_mask,
-        cv.RETR_LIST,
-        cv.CHAIN_APPROX_SIMPLE
+    # Classify and draw crease candidates
+    classified = classify_palm_lines(
+        crease_mask, points, palm_mask
     )
 
-    for contour in crease_contours:
-        if cv.arcLength(contour, False) >= 15:
-            cv.drawContours(
-                annotated,
-                [contour],
-                -1,
-                (255, 0, 255),
-                1
-            )
+    for contour, label, color in classified:
+        cv.drawContours(
+            annotated, [contour], -1, color, 2
+        )
 
     # Draw MediaPipe landmarks
     for x, y in points:
         cv.circle(
-            annotated,
-            (int(x), int(y)),
-            3,
-            (0, 255, 0),
-            -1
+            annotated, (int(x), int(y)), 3, (0, 255, 0), -1
         )
 
-    # Legend
-    cv.putText(
-        annotated,
-        "Palm outline",
-        (8, 25),
-        cv.FONT_HERSHEY_SIMPLEX,
-        0.6,
-        (0, 255, 255),
-        2
-    )
+    
+    # Show only categories that were actually classified.
+    legend = [("Palm outline", (0, 255, 255))]
 
-    cv.putText(
-        annotated,
-        "Crease candidates",
-        (8, 50),
-        cv.FONT_HERSHEY_SIMPLEX,
-        0.6,
-        (255, 0, 255),
-        2
-    )
+    for label, color in [
+        ("Possible heart line", (0, 0, 255)),
+        ("Possible head line", (255, 0, 0)),
+        ("Possible life line", (0, 200, 0)),
+        ("Possible fate line", (0, 165, 255)),
+        ("Unclassified crease", (255, 0, 255)),
+    ]:
+        if any(item[1] == label for item in classified):
+            legend.append((label, color))
+
+    for i, (text, color) in enumerate(legend):
+        cv.putText(
+            annotated,
+            text,
+            (8, 22 + i * 23),
+            cv.FONT_HERSHEY_SIMPLEX,
+            0.48,
+            color,
+            2
+        )
+
 
     return annotated
 
@@ -327,6 +411,7 @@ def feature_detection(left_palm, right_palm):
         left_mask,
         left_crease_mask
     )
+
     right_annotated = annotate_palm(
         right_display,
         right_points,
@@ -359,3 +444,21 @@ def feature_detection(left_palm, right_palm):
         "preprocessing": results,
         "features": feature_results
     }
+
+
+
+
+# Red
+# Possible heart-line fragment
+
+# Blue
+# Possible head-line fragment
+
+# Green
+# Possible life-line fragment
+
+# Magenta
+# Unclassified crease
+
+# Yellow
+# Estimated palm boundary

@@ -1,6 +1,6 @@
 import cv2 as cv
 import numpy as np
-from modules.validation import validation
+from modules.validate_image import validation
 
 def preprocessing(left_palm, right_palm):
     val, left, right, left_gray, right_gray = validation(
