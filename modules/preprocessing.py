@@ -3,10 +3,7 @@ import numpy as np
 from modules.validate_image import validation
 
 def preprocessing(left_palm, right_palm):
-    val, left, right, left_gray, right_gray = validation(
-        left_palm, right_palm
-    )
-
+    val, left, right, left_gray, right_gray, report = validation(left_palm, right_palm)
     completed = False
 
     if val:
@@ -49,5 +46,6 @@ def preprocessing(left_palm, right_palm):
         return completed, results
     else:
         print("Validation failed")
-        completed = False
-        return None, None, None, None
+        return False, {
+            "validation": report
+        }

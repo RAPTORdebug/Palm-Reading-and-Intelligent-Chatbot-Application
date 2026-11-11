@@ -6,4 +6,6 @@ streamlit
 Pillow
 mediapipe==0.10.21
 scikit-image
--e .
+# segmentation-models-pytorch
+ultralytics
+-e . 

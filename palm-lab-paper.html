@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#fbfaf6">
+<title>Palm Feature Detection</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..700;1,8..60,400..700&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme:light;
+  --paper:#fbfaf6;--paper-2:#f4f1e8;--paper-3:#ede9dc;--chrome:#ebe5d3;
+  --ink:#1a1814;--ink-2:#2c2820;--ink-dim:#4a4339;--muted:#8a8377;
+  --rule:#d8d0bf;--rule-strong:#bfb5a0;
+  --accent:#7a1a13;--accent-dim:#5c100a;--accent-soft:rgba(122,26,19,.08);
+  --red:#d4564b;--yellow:#d9a541;--green:#5fa05a;--ok:#3d7a39;--warn:#9a6a00;
+  --serif:"Source Serif 4","Latin Modern Roman","CMU Serif","Source Serif Pro","Iowan Old Style",Cambria,"Times New Roman",Georgia,serif;
+  --mono:"Source Code Pro","Latin Modern Mono","JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --shadow:0 1px 0 rgba(26,24,20,.02) inset,0 .4rem 1.2rem rgba(26,24,20,.04),0 1.2rem 3rem rgba(26,24,20,.05);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;min-height:100vh;padding-bottom:3.5rem;color:var(--ink);
+  background:radial-gradient(ellipse 60rem 40rem at 50% -10%,rgba(122,26,19,.035),transparent 70%),var(--paper);
+  background-attachment:fixed;
+  font:17px/1.6 var(--serif);font-feature-settings:"kern","liga","onum";
+  text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;
+}
+body::before{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;
+  background-image:radial-gradient(rgba(26,24,20,.05) 1px,transparent 1px),radial-gradient(rgba(26,24,20,.035) 1px,transparent 1px);
+  background-size:3px 3px,7px 7px;background-position:0 0,1px 2px;
+}
+a{color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(122,26,19,.3);transition:color .14s,border-color .14s,background .14s}
+a:hover,a:focus-visible{color:var(--accent-dim);border-bottom-color:var(--accent-dim);outline:none}
+.site-header,main{position:relative;z-index:2;width:min(100% - 2rem,70rem);margin:0 auto}
+.hidden{display:none!important}
+
+/* header */
+.site-header{display:flex;align-items:baseline;justify-content:space-between;gap:1rem;padding:1.5rem 0 1rem;border-bottom:1px solid var(--rule);margin-bottom:1.5rem}
+.brand{display:inline-flex;align-items:baseline;gap:.5rem;font:600 .95rem var(--mono);color:var(--ink);border-bottom:none}
+.brand::before{content:"";width:.5rem;height:.5rem;border-radius:50%;background:var(--green);box-shadow:0 0 0 3px rgba(95,160,90,.18);animation:pulse 2.4s ease-in-out infinite;transform:translateY(-.05em)}
+@keyframes pulse{50%{opacity:.55}}
+nav{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:.3rem;font:.88rem var(--mono)}
+nav a{padding:.3rem .65rem;color:var(--ink-dim);border:1px solid transparent;border-radius:2px}
+nav a::before{content:"·";margin-right:.4rem;color:var(--rule-strong)}
+nav a:hover,nav a:focus-visible{color:var(--accent);border-color:var(--rule);background:var(--accent-soft)}
+nav a[aria-current="page"]{color:var(--accent);border-color:var(--rule-strong);background:var(--accent-soft)}
+nav a[aria-current="page"]::before{content:">";color:var(--accent);font-weight:700}
+
+/* terminal block */
+.terminal-block{position:relative;margin:1.25rem 0;border:1px solid var(--rule-strong);border-radius:5px;background:#fdfcf7;
+  padding:2.5rem clamp(1.25rem,3vw,1.85rem) clamp(1.1rem,3vw,1.6rem);box-shadow:var(--shadow);animation:rise .5s both}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}}
+.terminal-block::before{content:"";position:absolute;top:0;left:0;right:0;height:1.85rem;background:var(--chrome);border-bottom:1px solid var(--rule);border-radius:4px 4px 0 0}
+.tb-dots{position:absolute;top:0;left:.95rem;height:1.85rem;display:flex;align-items:center;gap:.4rem;z-index:1}
+.tb-dots span{width:.6rem;height:.6rem;border-radius:50%;box-shadow:0 0 0 .5px rgba(0,0,0,.12) inset}
+.tb-dots span:nth-child(1){background:var(--red)}
+.tb-dots span:nth-child(2){background:var(--yellow)}
+.tb-dots span:nth-child(3){background:var(--green)}
+.tb-title{position:absolute;top:0;left:0;right:0;height:1.85rem;display:flex;align-items:center;justify-content:center;color:var(--muted);font:.78rem var(--mono);letter-spacing:.02em;pointer-events:none}
+
+/* type */
+.prompt{margin:0 0 .85rem;color:var(--ink-dim);font:500 .92rem var(--mono)}
+.prompt::before{content:"❯ ";color:var(--accent);font-weight:700;margin-right:.15rem}
+h1,h2,h3{font-family:var(--serif);color:var(--ink);margin:0 0 .7rem;font-weight:500;letter-spacing:-.005em}
+h1{margin-bottom:1rem;font-size:clamp(2.4rem,6.5vw,4.4rem);line-height:1.04;font-weight:600;letter-spacing:-.015em}
+h1 em,.lede em{font-style:italic;color:var(--accent);font-weight:500}
+h1 .cursor{display:inline-block;width:.12em;height:.85em;margin-left:.12ch;vertical-align:-.08em;background:var(--accent);animation:blink 1.05s steps(1,end) infinite}
+@keyframes blink{0%,49%{opacity:1}50%,100%{opacity:0}}
+h2{margin-bottom:.55rem;font-size:1.3rem;line-height:1.25;font-weight:600}
+h3{font:600 .82rem var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:.6rem}
+p{margin:0 0 .85rem;max-width:42rem;color:var(--ink-2)}
+.lede{font-size:clamp(1.05rem,1.4vw,1.18rem);line-height:1.55;color:var(--ink-dim);max-width:44rem;margin-bottom:.5rem}
+ol{margin:.5rem 0 .5rem;padding-left:1.25rem;color:var(--ink-2)}
+li{margin:.3rem 0}li::marker{color:var(--accent);font-family:var(--mono)}
+
+/* uploads */
+.uploads{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.drop{display:flex;flex-direction:column;gap:.7rem;min-height:300px;cursor:pointer;padding:1.15rem 1.2rem 1.25rem;
+  background:var(--paper-2);border:1px dashed var(--rule-strong);border-radius:4px;transition:border-color .16s,background .16s,transform .16s}
+.drop:hover,.drop.over{border-color:var(--accent);background:var(--paper-3);transform:translateY(-2px)}
+.drop input{display:none}
+.meta{display:inline-block;width:max-content;padding:.1rem .45rem;border:1px solid var(--rule-strong);border-radius:2px;
+  color:var(--accent);background:var(--accent-soft);font:.72rem var(--mono);letter-spacing:.04em;text-transform:lowercase}
+.drop h2{margin:0;font-size:1.2rem}
+.drop-b{flex:1;display:grid;place-items:center;text-align:center;color:var(--ink-dim);font:.88rem var(--mono);border:1px solid var(--rule);border-radius:3px;background:#fdfcf7;padding:1rem}
+.drop-b u{color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(122,26,19,.3)}
+.drop-b small{display:block;margin-top:.4rem;color:var(--muted);font-size:.75rem}
+.drop img{width:100%;height:240px;object-fit:contain;display:block;border:1px solid var(--rule-strong);border-radius:3px;background:#fdfcf7}
+.file{display:flex;justify-content:space-between;align-items:center;gap:.8rem;color:var(--muted);font:.8rem var(--mono)}
+.file span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.x{flex:none;width:1.5rem;height:1.5rem;border:1px solid var(--rule-strong);border-radius:3px;background:transparent;color:var(--ink-dim);font:.8rem/1 var(--mono);cursor:pointer}
+.x:hover,.x:focus-visible{background:var(--accent-soft);color:var(--accent);border-color:var(--accent);outline:none}
+
+/* actions */
+.action-row{display:flex;flex-wrap:wrap;align-items:center;gap:.9rem 1.2rem;margin-top:1.25rem}
+.button{display:inline-flex;align-items:center;gap:.4rem;border:1px solid var(--accent);padding:.55rem .95rem;border-radius:3px;
+  color:var(--accent);background:transparent;font:.9rem var(--mono);cursor:pointer;transition:background .14s,color .14s,border-color .14s}
+.button::before{content:"./";color:var(--muted)}
+.button:hover,.button:focus-visible{background:var(--accent);color:var(--paper);outline:none}
+.button:hover::before{color:rgba(251,250,246,.7)}
+.button:disabled{opacity:.5;cursor:default;background:transparent;color:var(--accent)}
+.work{color:var(--muted);font:.88rem var(--mono)}
+.work::after{content:"";display:inline-block;width:3ch;text-align:left;animation:dots 1.2s steps(1) infinite}
+@keyframes dots{0%{content:""}25%{content:"."}50%{content:".."}75%{content:"..."}}
+.msg{margin:1rem 0 0;font:.9rem var(--mono);max-width:none}
+.msg::before{font-weight:700;margin-right:.5rem}
+.msg.warn{color:var(--warn)}.msg.warn::before{content:"warn:"}
+.msg.ok{color:var(--ok)}.msg.ok::before{content:"ok:"}
+.msg.err{color:var(--accent)}.msg.err::before{content:"error:"}
+
+/* results */
+.pipe{display:grid;gap:1rem}
+.pipe-row{display:flex;flex-direction:column;gap:.7rem;padding:1rem 1.05rem 1.1rem;background:var(--paper-2);border:1px solid var(--rule);border-radius:4px}
+.pipe-grid{display:grid;grid-template-columns:repeat(var(--n,4),minmax(0,1fr));gap:1.3rem}
+.pipe-cell{position:relative;min-width:0}
+.pipe-cell:not(:last-child)::after{content:"→";position:absolute;top:calc(50% - 1.5rem);right:-1.3rem;width:1.3rem;text-align:center;color:var(--accent);font:.95rem var(--mono)}
+.cards{display:grid;gap:1rem}
+.cards.g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.cards.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.card{display:flex;flex-direction:column;gap:.6rem;padding:1rem 1.05rem 1.1rem;background:var(--paper-2);border:1px solid var(--rule);border-radius:4px;transition:border-color .16s,background .16s,transform .16s}
+.card:hover{border-color:var(--rule-strong);background:var(--paper-3);transform:translateY(-2px)}
+figure{margin:0}
+figure img{display:block;width:100%;aspect-ratio:1;object-fit:cover;cursor:zoom-in;border:1px solid var(--rule-strong);border-radius:3px;background:var(--paper-2);
+  box-shadow:0 1px 0 rgba(26,24,20,.04),0 .4rem 1rem rgba(26,24,20,.06);transition:filter .16s}
+figure img:hover{filter:brightness(1.03)}
+figcaption{margin-top:.5rem;font:.78rem var(--mono);color:var(--muted)}
+figcaption::before{content:"└─ ";color:var(--accent)}
+.empty{font:.9rem var(--mono);color:var(--muted)}
+
+/* dialog */
+dialog{width:fit-content;max-width:92vw;padding:0;border:1px solid var(--rule-strong);border-radius:5px;background:#fdfcf7;box-shadow:0 1.5rem 4rem rgba(26,24,20,.35);overflow:hidden;color:var(--ink)}
+dialog::backdrop{background:rgba(26,24,20,.55);backdrop-filter:blur(2px)}
+.dlg-bar{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.45rem .5rem .45rem .95rem;background:var(--chrome);border-bottom:1px solid var(--rule)}
+.dlg-title{font:.78rem var(--mono);color:var(--ink-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+dialog img{display:block;max-width:min(92vw,760px);max-height:78vh;width:auto;height:auto}
+
+/* status bar */
+.status-bar{position:fixed;bottom:0;left:0;right:0;z-index:5;display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:.5rem 1.1rem;
+  background:rgba(251,250,246,.92);border-top:1px solid var(--rule-strong);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:var(--muted);font:.74rem var(--mono);letter-spacing:.02em}
+.status-left,.status-right{display:flex;align-items:center;gap:.9rem;flex-wrap:wrap}
+.status-tag{padding:.05rem .5rem;border-radius:2px;background:var(--accent-soft);color:var(--accent);font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+.status-sep{color:var(--rule-strong)}
+
+@media (max-width:860px){
+  .pipe-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}
+  .pipe-cell:not(:last-child)::after{display:none}
+  .cards.g3{grid-template-columns:1fr 1fr}
+}
+@media (max-width:720px){.uploads{grid-template-columns:1fr}}
+@media (max-width:560px){
+  body{font-size:16px;padding-bottom:4.5rem}
+  .site-header{flex-direction:column;align-items:flex-start;gap:.65rem}
+  nav{justify-content:flex-start}
+  .cards.g3,.cards.g2{grid-template-columns:1fr}
+  .status-bar{font-size:.68rem;padding:.45rem .8rem}
+  .status-right{display:none}
+}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}h1 .cursor{animation:none;opacity:1}}
+</style>
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="#top">palm-lab</a>
+  <nav><a href="#upload" id="nav-upload" aria-current="page">upload</a><a href="#results" id="nav-results">results</a></nav>
+</header>
+
+<main id="top">
+  <section class="terminal-block">
+    <div class="tb-dots"><span></span><span></span><span></span></div>
+    <div class="tb-title">~/projects/palm-feature-detection</div>
+    <p class="prompt">./detect-features --left --right</p>
+    <h1>Palm <em>Feature</em> Detection<span class="cursor"></span></h1>
+    <p class="lede">Upload a left and a right palm. The pipeline preprocesses both images, detects features, and returns every stage so you can <em>inspect</em> each step.</p>
+    <ol>
+      <li>upload the left palm</li>
+      <li>upload the right palm</li>
+      <li>run feature detection</li>
+    </ol>
+  </section>
+
+  <section class="terminal-block" id="upload">
+    <div class="tb-dots"><span></span><span></span><span></span></div>
+    <div class="tb-title">upload</div>
+    <p class="prompt">select --left --right</p>
+    <div class="uploads">
+      <label class="drop" id="drop-left">
+        <input type="file" accept=".jpg,.jpeg,.png" id="file-left">
+        <span class="meta">left</span>
+        <h2>Left Palm</h2>
+        <div class="drop-b"><span>drop an image or <u>browse</u><small>jpg · jpeg · png</small></span></div>
+      </label>
+      <label class="drop" id="drop-right">
+        <input type="file" accept=".jpg,.jpeg,.png" id="file-right">
+        <span class="meta">right</span>
+        <h2>Right Palm</h2>
+        <div class="drop-b"><span>drop an image or <u>browse</u><small>jpg · jpeg · png</small></span></div>
+      </label>
+    </div>
+    <div class="action-row">
+      <button class="button" id="run">process images</button>
+      <span class="work hidden" id="work">processing palm images</span>
+    </div>
+    <p class="msg hidden" id="msg"></p>
+  </section>
+
+  <div id="results"></div>
+</main>
+
+<div class="status-bar">
+  <div class="status-left">
+    <span class="status-tag" id="tag">idle</span><span class="status-sep">·</span><span id="stmsg">awaiting images</span>
+  </div>
+  <div class="status-right"><span>palm-lab | client-side · feature detection</span></div>
+</div>
+
+<dialog id="dlg">
+  <div class="dlg-bar"><span class="dlg-title" id="dlg-title"></span><button class="x" id="dlg-x" aria-label="close">x</button></div>
+  <img id="dlg-img" alt="">
+</dialog>
+
+<script>
+/* ---- Backend hook ----------------------------------------------------
+   Set API_URL to your endpoint, e.g. "/api/feature-detection".
+   It receives multipart form data ("left", "right") and returns JSON:
+   { "success": true, "results": {
+       "preprocessing": { "original": {"left": url, "right": url}, ... },
+       "features": { "left_edges": url, "left_annotated": url, ... } } }
+   Images may be URLs or base64 data URIs. While API_URL is null, a small
+   in-browser demo fills the sections so the layout can be previewed. */
+const API_URL = "/modules/feature_detection";
+
+const $ = id => document.getElementById(id);
+const el = (t, c, txt) => {const e = document.createElement(t); if(c) e.className = c; if(txt != null) e.textContent = txt; return e};
+const files = {left: null, right: null};
+const msg = $('msg'), results = $('results'), runBtn = $('run'), work = $('work');
+const say = (type, text) => {msg.className = 'msg ' + type; msg.textContent = text};
+const titleCase = s => s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+/* status bar */
+function status(tag, text){$('tag').textContent = tag; $('stmsg').textContent = text}
+function fileStatus(){
+  const n = (files.left ? 1 : 0) + (files.right ? 1 : 0);
+  status('idle', n === 2 ? 'both palms loaded · ready' : n === 1 ? '1 of 2 palms loaded' : 'awaiting images');
+}
+
+/* uploads */
+function setupDrop(side){
+  const zone = $('drop-' + side), input = $('file-' + side), body = zone.querySelector('.drop-b');
+  const reset = () => {
+    files[side] = null; input.value = '';
+    zone.querySelectorAll('img,.file').forEach(n => n.remove());
+    body.classList.remove('hidden'); fileStatus();
+  };
+  const show = f => {
+    if(!f || !/^image\/(jpeg|png)$/.test(f.type)) return;
+    zone.querySelectorAll('img,.file').forEach(n => n.remove());
+    files[side] = f;
+    const img = el('img'); img.src = URL.createObjectURL(f); img.alt = side + ' palm';
+    const row = el('div', 'file'), x = el('button', 'x', 'x');
+    x.type = 'button'; x.title = 'remove';
+    x.onclick = e => {e.preventDefault(); e.stopPropagation(); reset()};
+    row.append(el('span', '', f.name + ' · ' + (f.size / 1024).toFixed(0) + ' KB'), x);
+    body.classList.add('hidden'); zone.append(img, row); fileStatus();
+  };
+  input.onchange = () => show(input.files[0]);
+  ['dragenter','dragover'].forEach(t => zone.addEventListener(t, e => {e.preventDefault(); zone.classList.add('over')}));
+  ['dragleave','drop'].forEach(t => zone.addEventListener(t, e => {e.preventDefault(); zone.classList.remove('over')}));
+  zone.addEventListener('drop', e => show(e.dataTransfer.files[0]));
+}
+setupDrop('left'); setupDrop('right');
+
+/* dialog */
+const dlg = $('dlg');
+function openBox(src, title){$('dlg-img').src = src; $('dlg-img').alt = title; $('dlg-title').textContent = title.toLowerCase(); dlg.showModal()}
+$('dlg-x').onclick = () => dlg.close();
+dlg.addEventListener('click', e => {if(e.target === dlg) dlg.close()});
+
+/* rendering */
+function fig(src, title, cap){
+  const f = el('figure'), i = el('img');
+  i.src = src; i.alt = title; i.loading = 'lazy'; i.onclick = () => openBox(src, title);
+  f.append(i, el('figcaption', '', cap || title));
+  return f;
+}
+function block(title, prompt, body, id){
+  const s = el('section', 'terminal-block');
+  if(id) s.id = id;
+  const dots = el('div', 'tb-dots'); dots.append(el('span'), el('span'), el('span'));
+  s.append(dots, el('div', 'tb-title', title));
+  if(prompt) s.append(el('p', 'prompt', prompt));
+  s.append(body);
+  results.append(s);
+}
+function render(r){
+  results.innerHTML = '';
+
+  const stages = Object.entries(r.preprocessing || {}), pre = el('div', 'pipe');
+  ['left', 'right'].forEach(side => {
+    const row = el('div', 'pipe-row'), g = el('div', 'pipe-grid');
+    g.style.setProperty('--n', Math.min(stages.length, 4) || 1);
+    stages.forEach(([stage, p], i) => {
+      const c = el('div', 'pipe-cell');
+      c.append(fig(p[side], titleCase(side) + ' - ' + titleCase(stage), String(i + 1).padStart(2, '0') + ' ' + stage.replace(/_/g, ' ')));
+      g.append(c);
+    });
+    row.append(el('span', 'meta', side), g); pre.append(row);
+  });
+  block('preprocessing results', 'show preprocessing --stages ' + stages.length, pre, 'results-pre');
+
+  const annotated = [];
+  Object.entries(r.features || {}).forEach(([name, src]) => {
+    if(name.endsWith('_points') || !src) return;
+    if(name.toLowerCase().includes('annotated')) annotated.push([name, src]);
+  });
+  const mkGrid = (items, cls) => {
+    const g = el('div', 'cards ' + cls);
+    items.forEach(([name, src]) => {
+      const m = name.match(/^(left|right)_(.*)/), label = titleCase(m ? m[2] : name);
+      const c = el('div', 'card');
+      c.append(el('span', 'meta', m ? m[1] : 'result'), fig(src, titleCase(name), label.toLowerCase()));
+      g.append(c);
+    });
+    return g;
+  };
+  if(annotated.length) block('annotated images', '', mkGrid(annotated, 'g2'));
+}
+
+/* real backend */
+async function callApi(){
+  const fd = new FormData();
+  fd.append('left', files.left); fd.append('right', files.right);
+  const res = await fetch(API_URL, {method: 'POST', body: fd});
+  if(!res.ok) throw new Error('server returned ' + res.status);
+  return res.json();
+}
+
+/* in-browser demo (layout preview only) */
+const S = 480;
+const mk = () => {const c = document.createElement('canvas'); c.width = c.height = S; return c};
+const load = f => new Promise((ok, no) => {const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = URL.createObjectURL(f)});
+const grayOf = c => {
+  const d = c.getContext('2d').getImageData(0, 0, S, S).data, g = new Float32Array(S * S);
+  for(let i = 0; i < g.length; i++) g[i] = .299 * d[4*i] + .587 * d[4*i+1] + .114 * d[4*i+2];
+  return g;
+};
+const toCanvas = (g, thr) => {
+  const c = mk(), x = c.getContext('2d'), im = x.createImageData(S, S);
+  for(let i = 0; i < g.length; i++){const v = thr == null ? g[i] : (g[i] > thr ? 255 : 0); im.data.set([v, v, v, 255], 4 * i)}
+  x.putImageData(im, 0, 0); return c;
+};
+const sobel = g => {
+  const m = new Float32Array(g.length);
+  for(let y = 1; y < S - 1; y++) for(let x = 1; x < S - 1; x++){
+    const i = y * S + x, a = g[i-S-1], b = g[i-S], c = g[i-S+1], d = g[i-1], f = g[i+1], h = g[i+S-1], j = g[i+S], k = g[i+S+1];
+    m[i] = Math.min(255, Math.hypot(c + 2*f + k - a - 2*d - h, h + 2*j + k - a - 2*b - c) / 2);
+  }
+  return m;
+};
+async function processDemo(file){
+  const orig = mk(); orig.getContext('2d').drawImage(await load(file), 0, 0, S, S);
+  const gray = toCanvas(grayOf(orig));
+  const blur = mk(), bx = blur.getContext('2d'); bx.filter = 'blur(3px)'; bx.drawImage(gray, 0, 0);
+  const bg = grayOf(blur), mean = bg.reduce((a, v) => a + v, 0) / bg.length, edges = sobel(bg);
+  const annot = mk(), ax = annot.getContext('2d'); ax.drawImage(orig, 0, 0);
+  const im = ax.getImageData(0, 0, S, S);
+  for(let i = 0; i < edges.length; i++) if(edges[i] > 40) im.data.set([122, 26, 19, 255], 4 * i);
+  ax.putImageData(im, 0, 0);
+  const u = c => c.toDataURL('image/png');
+  return {original: u(orig), grayscale: u(gray), blurred: u(blur), threshold: u(toCanvas(bg, mean)), edges: u(toCanvas(edges)), annotated: u(annot)};
+}
+async function demo(){
+  const [l, r] = await Promise.all([processDemo(files.left), processDemo(files.right)]);
+  const stages = {};
+  ['original', 'grayscale', 'blurred', 'threshold'].forEach(k => stages[k] = {left: l[k], right: r[k]});
+  return {success: true, results: {preprocessing: stages,
+    features: {left_edges: l.edges, right_edges: r.edges, left_annotated: l.annotated, right_annotated: r.annotated}}};
+}
+function showValidationErrors(report) {
+
+    results.innerHTML = '';
+
+    const section = el('section', 'terminal-block');
+
+    section.append(
+        el('h2', '', 'Image Validation Failed')
+    );
+
+    section.append(
+        el(
+            'p',
+            '',
+            'Your palm images did not meet the required image quality standards.'
+        )
+    );
+
+    const checks = [
+        ['Resolution', report.resolution],
+        ['Lighting', report.lighting],
+        ['Sharpness', report.sharpness]
+    ];
+
+    checks.forEach(([name, check]) => {
+
+        if (!check) return;
+
+        const card = el('div', 'card');
+
+        const passed = check.passed;
+
+        card.append(
+            el(
+                'h2',
+                '',
+                name + (passed ? ' - Passed' : ' - Failed')
+            )
+        );
+
+        card.append(
+            el(
+                'p',
+                '',
+                'Left image: ' + check.left
+            )
+        );
+
+        card.append(
+            el(
+                'p',
+                '',
+                'Right image: ' + check.right
+            )
+        );
+
+        card.append(
+            el(
+                'p',
+                '',
+                'Required: ' + check.required
+            )
+        );
+
+        if (!passed) {
+            card.append(
+                el(
+                    'p',
+                    'msg warn',
+                    'Please improve the ' + name.toLowerCase() + ' of your images.'
+                )
+            );
+        }
+
+        section.append(card);
+    });
+
+    section.append(
+        el(
+            'p',
+            'msg warn',
+            'Please upload new palm images and try again.'
+        )
+    );
+
+    results.append(section);
+
+    results.scrollIntoView({
+        behavior: 'smooth'
+    });
+}
+/* run */
+const setNav = id => ['upload', 'results'].forEach(n => {
+  const a = $('nav-' + n); n === id ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current');
+});
+
+runBtn.onclick = async () => {
+    msg.className = 'msg hidden';
+
+    if (!files.left || !files.right) {
+        say('warn', 'please upload both palm images.');
+        return;
+    }
+
+    results.innerHTML = '';
+    runBtn.disabled = true;
+    work.classList.remove('hidden');
+
+    status('running', 'processing palm images');
+
+    try {
+        const data = API_URL ? await callApi() : await demo();
+
+        if (data.success) {
+            say('ok', 'image processing done');
+
+            // Support both the old and new backend response formats.
+            const resultData = data.results || {
+                preprocessing: data.preprocessing,
+                features: data.features
+            };
+
+            render(resultData);
+
+            setNav('results');
+            status('done', 'feature detection completed');
+
+            results.scrollIntoView({
+                behavior: 'smooth'
+            });
+
+        } else {
+            if (data.error && data.error.validation) {
+                showValidationErrors(data.error.validation);
+                status('error', 'image validation failed');
+            } else {
+                say(
+                    'err',
+                    typeof data.error === 'string'
+                        ? data.error
+                        : data.error?.message || 'Feature detection failed.'
+                );
+
+                status('error', 'feature detection failed');
+            }
+        }
+
+    } catch (e) {
+        say('err', 'an error occurred: ' + e.message);
+        status('error', 'see message above');
+
+    } finally {
+        work.classList.add('hidden');
+        runBtn.disabled = false;
+    }
+};
+</script>
+</body>
+</html>
